@@ -8,7 +8,7 @@ import {
 } from "../utility";
 import { Vandor } from "../models/Vandor";
 import { CreateFoodInput } from "../dto/Food.dto";
-import { Food } from "../models";
+import { Food, Offer } from "../models";
 import { Order } from "../models/Order";
 export const VandorLogin = async (
   req: Request,
@@ -256,7 +256,29 @@ export const GetOffers = async (
   req: Request,
   res: Response,
   next: NextFunction
-) => {};
+) => {
+  const user = req.user;
+  if (user) {
+    let currentOffers = Array();
+    const offers = await Offer.find().populate("vandors", {
+      strictPopulate: false,
+    });
+    if (offers) {
+      offers.map((item) => {
+        if (item.vandors) {
+          item.vandors.map((vendor) => {
+            if (vendor._id.toString() === user._id) {
+              currentOffers.push(item);
+            }
+          });
+        }
+        if (item.offerType === "GENERIC") currentOffers.push(item);
+      });
+    }
+    return res.json(currentOffers);
+  }
+  return res.json({"message":"Offers not available!"})
+};
 export const AddOffers = async (
   req: Request,
   res: Response,
@@ -265,28 +287,93 @@ export const AddOffers = async (
   const user = req.user;
   if (user) {
     const {
-      offerType,
-      vendors,
       title,
       description,
-      minValues,
+      offerType,
       offerAmount,
-      startValidity,
-      endValidity,
+      pincode,
       promocode,
       promoType,
+      startValidity,
+      endValidity,
       bank,
       bins,
-      pincode,
       isActive,
+      minValues,
+      vandors,
     } = <CreateOfferrInput>req.body;
 
-    const vendor= await Findvandor(user._id);
+    const vendor = await Findvandor(user._id);
 
+    if (vendor) {
+      const offer = await Offer.create({
+        title,
+        description,
+        offerType,
+        offerAmount,
+        pincode,
+        promocode,
+        promoType,
+        startValidity,
+        endValidity,
+        bank,
+        bins,
+        isActive,
+        minValues,
+        vandors: [vendor],
+      });
+
+      console.log(offer);
+      return res.status(200).json(offer);
+    }
   }
 };
 export const EditOffers = async (
   req: Request,
   res: Response,
   next: NextFunction
-) => {};
+) => {
+  const user = req.user;
+
+  const offerId= req.params.id;
+  if (user) {
+    const {
+      title,
+      description,
+      offerType,
+      offerAmount,
+      pincode,
+      promocode,
+      promoType,
+      startValidity,
+      endValidity,
+      bank,
+      bins,
+      isActive,
+      minValues,
+    } = <CreateOfferrInput>req.body;
+
+    const currentOffer= await Offer.findById(offerId);
+    const vendor = await Findvandor(user._id);
+
+    if (vendor) {
+        currentOffer.title=title,
+        currentOffer.description=description,
+        currentOffer.offerType=offerType,
+        currentOffer.offerAmount=offerAmount,
+        currentOffer.pincode=pincode,
+        currentOffer.promocode=promocode,
+        currentOffer.promoType=promoType,
+        currentOffer.startValidity=startValidity,
+        currentOffer.endValidity=endValidity,
+        currentOffer.bank=bank,
+        currentOffer.bins=bins,
+        currentOffer.isActive=isActive,
+        currentOffer.minValues=minValues
+
+        const result= await currentOffer.save();
+
+      return res.status(200).json(result);
+    }
+  }
+};

@@ -29,7 +29,7 @@ export interface VandorPayload {
 
 export interface CreateOfferrInput {
   offerType: string;
-  vendors: [any];
+  vandors: [any];
   title: string;
   description: string;
   minValues: number;

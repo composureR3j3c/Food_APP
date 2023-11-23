@@ -38,7 +38,7 @@ router.use(Authenticate);
 router.get("/profile", GetVandorprofile);
 router.patch("/profile", UpdateVandorprofile);
 router.patch("/service", UpdateVandorservice);
-router.get("/foods", GetFoods);
+router.get("/foods", GetFoods); 
 
 router.post("/food", images, AddFood);
 router.post("/coverImage", images, UpdateVandorCoverImage);

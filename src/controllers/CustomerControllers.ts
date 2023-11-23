@@ -13,7 +13,7 @@ import {
   GenerateSignature,
   ValidatePassword,
 } from "../utility";
-import { Customer, Food } from "../models";
+import { Customer, Food, Offer } from "../models";
 import { GenerateOtp, OnRequestOTP } from "../utility/NotificationUtility";
 import { Order } from "../models/Order";
 export const CustomerSignup = async (
@@ -383,3 +383,26 @@ export const DeleteCart = async (
   }
   return res.status(404).json({message:"cart is already empty"})
 };
+
+
+export const VerifyOffers = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+
+  const offerId=req.params.id;
+  const customer=req.user;
+  if (customer){
+    const appliedOffer= await Offer.findById(offerId);
+    if (appliedOffer) {
+      if (appliedOffer.promoType=="USER") {
+        
+      }
+      else if (appliedOffer.isActive) {
+        return res.status(200).json({message:"Offer is valid",offer:appliedOffer});
+      }
+      
+    }
+  }
+}
