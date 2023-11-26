@@ -39,7 +39,13 @@ export class CreateCustomerInput {
     email: string; 
     verified: boolean;
   }
-  export class OrderInputs {
+  export class cartItem {
     _id: string;
     unit: number; 
+  }
+
+  export class OrderInputs{
+    txnId:string;
+    amount:string;
+    item:[cartItem];
   }

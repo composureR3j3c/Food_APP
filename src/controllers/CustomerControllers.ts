@@ -6,6 +6,7 @@ import {
   EditCustomerProfileInput,
   OrderInputs,
   UserLoginInput,
+  cartItem,
 } from "../dto/Customer.dio";
 import {
   GeneratePassword,
@@ -13,7 +14,7 @@ import {
   GenerateSignature,
   ValidatePassword,
 } from "../utility";
-import { Customer, Food, Offer } from "../models";
+import { Customer, Food, Offer, Transaction } from "../models";
 import { GenerateOtp, OnRequestOTP } from "../utility/NotificationUtility";
 import { Order } from "../models/Order";
 export const CustomerSignup = async (
@@ -221,30 +222,49 @@ export const EditCustomerProfile = async (
   });
 };
 
+const validateTransaction=async (txnId:string)=>{
+  const currentTransaction= await Transaction.findById(txnId);
+  if(currentTransaction){
+    if(currentTransaction.status.toLowerCase() !=="failed"){
+      return{status:true, currentTransaction}
+    }
+  }
+  return{status:false, currentTransaction}
+}
+
 export const CreateOrder = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   const customer = req.user;
+
+  const {txnId,amount,item}=<OrderInputs> req.body;
   if (customer) {
+
+    const{status,currentTransaction}=await validateTransaction(txnId);
+
+    if(!status){
+      return res.status(404).json({message:'Error with Create Order'})
+    }
     const orderId = `${Math.floor(Math.random() * 89999 + 1000)}`;
     const profile = await Customer.findById(customer._id);
-    const cart = <[OrderInputs]>req.body;
 
     let cartItems = Array();
     let netAmount = 0.0;
+    let vandorId=''
 
     const foods = await Food.find()
       .where("_id")
-      .in(cart.map((item) => item._id))
+      .in(item.map((item) => item._id))
       .exec();
 
     foods.map((food) => {
-      cart.map(({ _id, unit }) => {
+      item.map(({ _id, unit }) => {
         if (food._id == _id) {
           netAmount += food.price * unit;
           cartItems.push({ food, unit });
+          vandorId=food.vandorId
         }
       });
     });
@@ -252,17 +272,23 @@ export const CreateOrder = async (
     if (cartItems) {
       const currentOrder = await Order.create({
         orderId: orderId,
-        vandorId: "6523b48c29c5a41b5605b32c",
+        vandorId: vandorId,
         items: cartItems,
         totalAmount: netAmount,
         orderDate: new Date(),
         paidThrough: "Cash",
         paymentResponse: "",
-        orderStatus: "Waiting", 
+        orderStatus: "Waiting",
       });
       if (currentOrder) {
         profile.orders.push(currentOrder);
+
+        currentTransaction.vandorId=vandorId;
+        currentTransaction.orderId=orderId;
+        currentTransaction.status="CONFIRMED";
+
         await profile.save();
+        
         return res.status(200).json(currentOrder);
       }
     }
@@ -279,10 +305,10 @@ export const GetOrders = async (
     const profile = await Customer.findById(customer._id).populate("orders", {
       strictPopulate: false,
     });
-    console.log(profile.toString())
+    console.log(profile.toString());
 
-    if(profile){
-      return res.status(200).json(profile)
+    if (profile) {
+      return res.status(200).json(profile);
     }
   }
 };
@@ -297,53 +323,57 @@ export const GetOrderById = async (
       strictPopulate: false,
     });
 
-    if(order){
-      return res.status(200).json(order)
+    if (order) {
+      return res.status(200).json(order);
     }
   }
-  return res.status(404).json({message:"No order found"})
+  return res.status(404).json({ message: "No order found" });
 };
 export const AddToCart = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
-  const customer= req.user;
-  if(customer){
-    const profile = await Customer.findById(customer._id)
-    .populate('cart.food',{
-      strictPopulate: false,
-    });
-    let cartItems=Array();
-    const {_id,unit}=<OrderInputs>req.body;
+  const customer = req.user;
+  if (customer) {
+    const profile = await Customer.findById(customer._id).populate(
+      "cart.food",
+      {
+        strictPopulate: false,
+      }
+    );
+    let cartItems = Array();
+    const { _id, unit } = <cartItem>req.body;
 
-    const food= await Food.findById(_id);
-    if(food){
-    if (profile!=null) { 
-      cartItems=profile.cart;
-      if(cartItems.length>0){
-        let existFoodItems=cartItems.filter((item)=>item.food._id.toString()===_id);
-        if(existFoodItems.length>0){
-          const index=cartItems.indexOf(existFoodItems[0]);
-          if(unit>0){
-            cartItems[index]= {food,unit};
-          }else{ 
-            cartItems.splice(index,1);
+    const food = await Food.findById(_id);
+    if (food) {
+      if (profile != null) {
+        cartItems = profile.cart;
+        if (cartItems.length > 0) {
+          let existFoodItems = cartItems.filter(
+            (item) => item.food._id.toString() === _id
+          );
+          if (existFoodItems.length > 0) {
+            const index = cartItems.indexOf(existFoodItems[0]);
+            if (unit > 0) {
+              cartItems[index] = { food, unit };
+            } else {
+              cartItems.splice(index, 1);
+            }
+          } else {
+            cartItems.push({ food, unit });
           }
+        } else {
+          cartItems.push({ food, unit });
         }
-        else{
-          cartItems.push({food,unit})
+        if (cartItems) {
+          const cartResult = await profile.save();
+          return res.status(200).json(cartResult.cart);
         }
-      }else{
-        cartItems.push({food,unit})
       }
-      if(cartItems){
-        const cartResult=await profile.save();
-        return res.status(200).json(cartResult.cart);
-      }
-    }}
+    }
   }
-    return res.status(400).json({message:"Unable to Add to Cart!"})
+  return res.status(400).json({ message: "Unable to Add to Cart!" });
 };
 export const GetCart = async (
   req: Request,
@@ -352,15 +382,18 @@ export const GetCart = async (
 ) => {
   const customer = req.user;
   if (customer) {
-    const profile = await Customer.findById(customer._id).populate("cart.food", {
-      strictPopulate: false,
-    });
+    const profile = await Customer.findById(customer._id).populate(
+      "cart.food",
+      {
+        strictPopulate: false,
+      }
+    );
 
-    if(profile){
+    if (profile) {
       return res.status(200).json(profile.cart);
     }
   }
-  return res.status(404).json({message:"cart is empty"})
+  return res.status(404).json({ message: "cart is empty" });
 };
 export const DeleteCart = async (
   req: Request,
@@ -369,40 +402,73 @@ export const DeleteCart = async (
 ) => {
   const customer = req.user;
   if (customer) {
-    const profile = await Customer.findById(customer._id).populate("cart.food", {
-      strictPopulate: false,
-    });
+    const profile = await Customer.findById(customer._id).populate(
+      "cart.food",
+      {
+        strictPopulate: false,
+      }
+    );
 
-    if(profile!=null){
-
-      profile.cart= [] as any;
-      const cartResult=await profile.save();
+    if (profile != null) {
+      profile.cart = [] as any;
+      const cartResult = await profile.save();
 
       return res.status(200).json(cartResult);
     }
   }
-  return res.status(404).json({message:"cart is already empty"})
+  return res.status(404).json({ message: "cart is already empty" });
 };
-
 
 export const VerifyOffers = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
-
-  const offerId=req.params.id;
-  const customer=req.user;
-  if (customer){
-    const appliedOffer= await Offer.findById(offerId);
+  const offerId = req.params.id;
+  const customer = req.user;
+  if (customer) {
+    const appliedOffer = await Offer.findById(offerId);
     if (appliedOffer) {
-      if (appliedOffer.promoType=="USER") {
-        
+      if (appliedOffer.promoType == "USER") {
+      } else if (appliedOffer.isActive) {
+        return res
+          .status(200)
+          .json({ message: "Offer is valid", offer: appliedOffer });
       }
-      else if (appliedOffer.isActive) {
-        return res.status(200).json({message:"Offer is valid",offer:appliedOffer});
-      }
-      
     }
   }
-}
+};
+
+export const CreatePayment = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const customer = req.user;
+
+  const { amount, paymentMode, offerId } = req.body;
+
+  let paymentAmount = Number(amount);
+
+  if (offerId) {
+    const appliedOffer = await Offer.findById(offerId);
+    if (appliedOffer) {
+      if (appliedOffer.isActive) {
+        paymentAmount = paymentAmount - appliedOffer.offerAmount;
+      }
+    }
+  } 
+
+  const transform = await Transaction.create({
+    customer: customer._id,
+    vendorId: "",
+    orderId: "", 
+    orderValue: paymentAmount,
+    offerUsed: offerId || "NA",
+    status: "OPEN", 
+    paymentMode: paymentMode,
+    paymentResponse: "Payment is Cash on Delivery",
+  });
+
+  res.status(200).json(transform);
+};
