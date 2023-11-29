@@ -14,7 +14,7 @@ import {
   GenerateSignature,
   ValidatePassword,
 } from "../utility";
-import { Customer, Food, Offer, Transaction } from "../models";
+import { Customer, Food, Offer, Transaction, Vandor } from "../models";
 import { GenerateOtp, OnRequestOTP } from "../utility/NotificationUtility";
 import { Order } from "../models/Order";
 export const CustomerSignup = async (
@@ -222,15 +222,29 @@ export const EditCustomerProfile = async (
   });
 };
 
-const validateTransaction=async (txnId:string)=>{
-  const currentTransaction= await Transaction.findById(txnId);
-  if(currentTransaction){
-    if(currentTransaction.status.toLowerCase() !=="failed"){
-      return{status:true, currentTransaction}
+const assignOrderForDelivery=async (orderId:string, venderId:string) => {
+  const vandor=await Vandor.findById(venderId);
+
+  if (vandor) {
+    const areaCode=vandor.pincode;
+    const vandorLat=vandor.lat;
+    const VandorLng=vandor.lng;
+
+
+
+  }
+}
+
+
+const validateTransaction = async (txnId: string) => {
+  const currentTransaction = await Transaction.findById(txnId);
+  if (currentTransaction) {
+    if (currentTransaction.status.toLowerCase() !== "failed") {
+      return { status: true, currentTransaction };
     }
   }
-  return{status:false, currentTransaction}
-}
+  return { status: false, currentTransaction };
+};
 
 export const CreateOrder = async (
   req: Request,
@@ -239,20 +253,19 @@ export const CreateOrder = async (
 ) => {
   const customer = req.user;
 
-  const {txnId,amount,item}=<OrderInputs> req.body;
+  const { txnId, amount, item } = <OrderInputs>req.body;
   if (customer) {
+    const { status, currentTransaction } = await validateTransaction(txnId);
 
-    const{status,currentTransaction}=await validateTransaction(txnId);
-
-    if(!status){
-      return res.status(404).json({message:'Error with Create Order'})
+    if (!status) {
+      return res.status(404).json({ message: "Error with Create Order" });
     }
     const orderId = `${Math.floor(Math.random() * 89999 + 1000)}`;
     const profile = await Customer.findById(customer._id);
 
     let cartItems = Array();
     let netAmount = 0.0;
-    let vandorId=''
+    let vandorId = "655338b34461d76c22495c67";
 
     const foods = await Food.find()
       .where("_id")
@@ -264,15 +277,15 @@ export const CreateOrder = async (
         if (food._id == _id) {
           netAmount += food.price * unit;
           cartItems.push({ food, unit });
-          vandorId=food.vandorId
+          vandorId = food.vandorId;
         }
       });
-    });
-
+    }); 
+    // console.log(vandorId);
     if (cartItems) {
       const currentOrder = await Order.create({
         orderId: orderId,
-        vandorId: vandorId,
+        vandorId: "655338b34461d76c22495c67",
         items: cartItems,
         totalAmount: netAmount,
         orderDate: new Date(),
@@ -283,12 +296,16 @@ export const CreateOrder = async (
       if (currentOrder) {
         profile.orders.push(currentOrder);
 
-        currentTransaction.vandorId=vandorId;
-        currentTransaction.orderId=orderId;
-        currentTransaction.status="CONFIRMED";
+        currentTransaction.vandorId = vandorId;
+        currentTransaction.orderId = orderId;
+        currentTransaction.status = "CONFIRMED";
+
+        await currentTransaction.save();
+
+        assignOrderForDelivery(currentOrder._id,vandorId);
 
         await profile.save();
-        
+
         return res.status(200).json(currentOrder);
       }
     }
@@ -457,15 +474,15 @@ export const CreatePayment = async (
         paymentAmount = paymentAmount - appliedOffer.offerAmount;
       }
     }
-  } 
+  }
 
   const transform = await Transaction.create({
     customer: customer._id,
     vendorId: "",
-    orderId: "", 
+    orderId: "",
     orderValue: paymentAmount,
     offerUsed: offerId || "NA",
-    status: "OPEN", 
+    status: "OPEN",
     paymentMode: paymentMode,
     paymentResponse: "Payment is Cash on Delivery",
   });

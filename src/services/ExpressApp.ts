@@ -1,5 +1,5 @@
 import express, { Application } from "express";
-import { AdminRoutes, CustomerRoutes, VandorRoutes } from "../routes";
+import { AdminRoutes, CustomerRoutes, DeliveryRoutes, VandorRoutes } from "../routes";
 import path from 'path';
 import { ShoppingRoutes } from "../routes/ShoppingRoute";
 
@@ -16,6 +16,7 @@ app.use("/admin", AdminRoutes);
 app.use("/vandor", VandorRoutes);
 app.use("/shopping", ShoppingRoutes);
 app.use("/user", CustomerRoutes);
+app.use("/delivery", DeliveryRoutes);
 
 return app;
 }
