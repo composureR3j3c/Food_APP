@@ -2,7 +2,7 @@ import express, { Request, Response, NextFunction } from "express";
 import { CreateVandorInput } from "../dto/Vandor.dio";
 import { Vandor } from "../models/Vandor";
 import { GeneratePassword, GenerateSalt } from "../utility/PasswordUtility";
-import { Transaction } from "../models";
+import { DeliveryUser, Transaction } from "../models";
 
 export const Findvandor = async (id: string | undefined, email?: string) => {
   if (email) {
@@ -113,4 +113,38 @@ export const GetTransactionsById = async (
   }
 
   return res.status(400).json({ message: "transactions not found!" });
+};
+
+export const VerifyDeliveryUser = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const { _id, status } = req.body;
+
+  if (_id) {
+    const profile = await DeliveryUser.findById(_id);
+
+    if (profile) {
+      profile.verified = status;
+
+      const result = await profile.save();
+
+      return res.status(200).json(result);
+    }
+  }
+  return res.status(404).json({ message: "user not found" });
+};
+
+export const GetDeliveryUser = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const deliveryUsers = await DeliveryUser.find();
+
+  if (deliveryUsers) {
+    return res.status(200).json(deliveryUsers);
+  }
+  return res.status(404).json({ message: "user not found" });
 };

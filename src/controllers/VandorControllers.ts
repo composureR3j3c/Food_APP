@@ -119,7 +119,7 @@ export const UpdateVandorservice = async (
   const existingVander = await Findvandor(user?._id);
 
   if (user) {
-    if (existingVander) {
+    if (existingVander) { 
       existingVander.serviceAvailable = !existingVander.serviceAvailable;
 
       if(lat&&lng){

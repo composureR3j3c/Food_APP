@@ -14,7 +14,14 @@ import {
   GenerateSignature,
   ValidatePassword,
 } from "../utility";
-import { Customer, Food, Offer, Transaction, Vandor } from "../models";
+import {
+  Customer,
+  DeliveryUser,
+  Food,
+  Offer,
+  Transaction,
+  Vandor,
+} from "../models";
 import { GenerateOtp, OnRequestOTP } from "../utility/NotificationUtility";
 import { Order } from "../models/Order";
 export const CustomerSignup = async (
@@ -30,6 +37,12 @@ export const CustomerSignup = async (
     return res.status(400).json(inputError);
   }
   const { email, phone, password } = customerInputs;
+
+  const existCustomer = await Customer.findOne({ email: email });
+
+  if (existCustomer) {
+    return res.status(409).json({ message: "User already exists" });
+  }
 
   const salt = await GenerateSalt();
   const userPassword = await GeneratePassword(password, salt);
@@ -222,19 +235,35 @@ export const EditCustomerProfile = async (
   });
 };
 
-const assignOrderForDelivery=async (orderId:string, venderId:string) => {
-  const vandor=await Vandor.findById(venderId);
+const assignOrderForDelivery = async (orderId: string, venderId: string) => {
+  const vandor = await Vandor.findById(venderId);
 
   if (vandor) {
-    const areaCode=vandor.pincode;
-    const vandorLat=vandor.lat;
-    const VandorLng=vandor.lng;
+    const areaCode = vandor.pincode;
+    const vandorLat = vandor.lat;
+    const VandorLng = vandor.lng;
 
+    const deliveryPerson = await DeliveryUser.find({
+      pincode: areaCode,
+      verified: true,
+      isAvailable: true,
+    });
 
+    console.log((areaCode))
 
+    if(deliveryPerson){
+
+      console.log(`Delivery Person ${deliveryPerson[0]}`)
+      const currentOrder=await Order.findById(orderId);
+
+      if (currentOrder) {
+        currentOrder.deliveryId=deliveryPerson[0]._id;
+        const response =await currentOrder.save();
+        console.log
+      }
+    }
   }
-}
-
+};
 
 const validateTransaction = async (txnId: string) => {
   const currentTransaction = await Transaction.findById(txnId);
@@ -280,7 +309,7 @@ export const CreateOrder = async (
           vandorId = food.vandorId;
         }
       });
-    }); 
+    });
     // console.log(vandorId);
     if (cartItems) {
       const currentOrder = await Order.create({
@@ -302,7 +331,8 @@ export const CreateOrder = async (
 
         await currentTransaction.save();
 
-        assignOrderForDelivery(currentOrder._id,vandorId);
+        vandorId="655338b34461d76c22495c67"
+        await assignOrderForDelivery(currentOrder._id, vandorId);
 
         await profile.save();
 

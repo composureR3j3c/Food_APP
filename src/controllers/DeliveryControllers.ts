@@ -1,14 +1,10 @@
-import { VandorLogin } from './VandorControllers';
 import { plainToClass } from "class-transformer";
 import { validate } from "class-validator";
 import express, { Request, Response, NextFunction } from "express";
 import {
-  CreateCustomerInput,
   CreateDeliveryUserInput,
   EditCustomerProfileInput,
-  OrderInputs,
   UserLoginInput,
-  cartItem,
 } from "../dto/Customer.dio";
 import {
   GeneratePassword,
@@ -16,7 +12,7 @@ import {
   GenerateSignature,
   ValidatePassword,
 } from "../utility";
-import { Customer, Food, Offer, Transaction, Vandor } from "../models";
+import { Customer, DeliveryUser, Food, Offer, Transaction, Vandor } from "../models";
 import { GenerateOtp, OnRequestOTP } from "../utility/NotificationUtility";
 import { Order } from "../models/Order";
 export const DeliveryUserSignup = async (
@@ -31,31 +27,33 @@ export const DeliveryUserSignup = async (
   if (inputError.length > 0) {
     return res.status(400).json(inputError);
   }
-  const { email, phone, password } = deliveryUserInputs;
+  const { email, phone, password, address, firstName, lastName, pincode } = deliveryUserInputs;
 
   const salt = await GenerateSalt();
   const userPassword = await GeneratePassword(password, salt);
 
-  const { otp, expiry } = GenerateOtp();
-  // console.log("otp",otp, expiry)
+  const existDeliveryUser=await DeliveryUser.findOne({email:email});
 
-  const result = await Customer.create({
+  if(existDeliveryUser){
+    return res.status(409).json({message:"User already exists"})
+  }  
+
+
+  const result = await DeliveryUser.create({
     email: email,
     password: userPassword,
     salt: salt,
-    firstname: "",
-    lastName: "",
-    address: "",
+    firstname: firstName,
+    lastName: lastName,
+    address: address,
     phone: phone,
+    pincode: pincode,
     verified: false,
-    otp: otp,
-    otp_expiry: expiry,
     lat: 0,
     lng: 0,
-    orders: [],
+    isAvailable: false
   });
   if (result) {
-    await OnRequestOTP(otp, phone);
 
     const signature = await GenerateSignature({
       _id: result._id,
@@ -85,26 +83,26 @@ export const DeliveryUserLogin = async (
     return res.status(400).json(loginErrors);
   }
   const { email, password } = loginInputs;
-  const customer = await Customer.findOne({ email: email });
+  const deliveryUser = await DeliveryUser.findOne({ email: email });
 
-  if (customer) {
+  if (deliveryUser) {
     const validation = await ValidatePassword(
       password,
-      customer.password,
-      customer.salt
+      deliveryUser.password,
+      deliveryUser.salt
     );
     console.log(validation);
     if (validation) {
       const signature = await GenerateSignature({
-        _id: customer._id,
-        email: customer.email,
-        verified: customer.verified,
+        _id: deliveryUser._id,
+        email: deliveryUser.email,
+        verified: deliveryUser.verified,
       });
 
       return res.status(201).json({
         signature: signature,
-        verified: customer.verified,
-        email: customer.email,
+        verified: deliveryUser.verified,
+        email: deliveryUser.email,
       });
     }
   }
@@ -112,37 +110,36 @@ export const DeliveryUserLogin = async (
     message: "Login Error!",
   });
 };
-export const DeliveryUserStatus = async (
+
+export const UpdateDeliveryUserStatus = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
-  const { otp } = req.body;
-  const customer = req.user;
-  if (customer) {
-    const profile = await Customer.findById(customer._id);
+
+  const deliveryUser = req.user;
+  if (deliveryUser) {
+
+    const { lat, lng } = req.body;
+
+    const profile = await DeliveryUser.findById(deliveryUser._id);
+
+
     if (profile) {
-      // console.log(profile.otp_expiry, new Date())
-      if (profile.otp === parseInt(otp) && profile.otp_expiry >= new Date()) {
-        profile.verified = true;
-      }
-      const updatedCustomerResponse = await profile.save();
 
-      const signature = await GenerateSignature({
-        _id: updatedCustomerResponse._id,
-        email: updatedCustomerResponse.email,
-        verified: updatedCustomerResponse.verified,
-      });
+      if (lat&&lng) {
+        profile.lat=lat;
+        profile.lng=lng;
+      }        
 
-      return res.status(201).json({
-        signature: signature,
-        verified: updatedCustomerResponse.verified,
-        email: updatedCustomerResponse.email,
-      });
+      profile.isAvailable=!profile.isAvailable;
+      const result= await profile.save();
+
+      return res.status(200).json(result);
     }
   }
   return res.status(400).json({
-    verified: "false",
+    message: "Update status Error!",
   });
 };
 
@@ -153,7 +150,7 @@ export const GetDeliveryUserProfile = async (
 ) => {
   const customer = req.user;
   if (customer) {
-    const profile = await Customer.findById(customer._id);
+    const profile = await DeliveryUser.findById(customer._id);
 
     return res.status(200).json(profile);
   }
@@ -161,12 +158,13 @@ export const GetDeliveryUserProfile = async (
     message: "Get profile Error!",
   });
 };
+
 export const EditDeliveryUserProfile = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
-  const customer = req.user;
+  const deliveryUser = req.user;
   const profileInputs = plainToClass(EditCustomerProfileInput, req.body);
   const profileErrors = await validate(profileInputs, {
     validationError: { target: true },
@@ -177,10 +175,10 @@ export const EditDeliveryUserProfile = async (
   }
 
   const { firstName, lastName, address } = profileInputs;
-  if (customer) {
-    console.log(customer._id);
+  if (deliveryUser) {
+    console.log(deliveryUser._id);
 
-    const profile = await Customer.findById(customer._id);
+    const profile = await DeliveryUser.findById(deliveryUser._id);
 
     if (profile) {
       profile.firstName = firstName;
@@ -196,3 +194,5 @@ export const EditDeliveryUserProfile = async (
     message: "Edit profile Error!",
   });
 };
+
+
